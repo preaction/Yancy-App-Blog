@@ -50,8 +50,17 @@ app->yancy->plugin( 'Auth::Password', {
 
 # User editor
 app->yancy->plugin( 'Editor', {
-    controller_class => 'Yancy::MultiTenant',
-    require_user => 1,
+    moniker => 'dashboard',
+    backend => app->yancy->backend,
+    schema => {
+        blog_posts => {
+            %{ app->yancy->schema( 'blog_posts' ) },
+            'x-list-columns' => [qw( title slug )],
+        },
+    },
+    default_controller => 'Yancy::MultiTenant',
+    require_user => {},
+    route => app->routes->any( '/dashboard' ),
 } );
 
 app->routes->get( '/' )->to(
@@ -63,7 +72,7 @@ app->routes->get( '/' )->to(
 
 helper login_user => sub { shift->yancy->auth->current_user };
 
-my $user_root = app->routes->under( '/:username',
+my $user_root = app->routes->under( '/user/:username',
     sub {
         my ( $c ) = @_;
         my $username = $c->stash( 'username' );
@@ -108,8 +117,9 @@ __DATA__
 @@ el/login.html.ep
 % if ( login_user ) {
     Hello, <%= login_user->{username} %> <%= link_to Logout => 'yancy.auth.password.logout' %>
+    %= link_to 'Dashboard' => '/dashboard'
     % if ( login_user->{is_admin} ) {
-        %= link_to 'Admin Dashboard' => '/yancy'
+        %= link_to 'Site Admin' => '/yancy'
     % }
 % }
 % else {
