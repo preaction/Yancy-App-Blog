@@ -12,6 +12,11 @@ app->pg->auto_migrate(1)->migrations->from_data;
 plugin Yancy => {
     backend => { Pg => app->pg },
     read_schema => 1,
+    editor => {
+        require_user => {
+            is_admin => 1,
+        },
+    },
     schema => {
         mojo_migrations => { 'x-hidden' => 1 },
         blog_posts => {
@@ -103,6 +108,9 @@ __DATA__
 @@ el/login.html.ep
 % if ( login_user ) {
     Hello, <%= login_user->{username} %> <%= link_to Logout => 'yancy.auth.password.logout' %>
+    % if ( login_user->{is_admin} ) {
+        %= link_to 'Admin Dashboard' => '/yancy'
+    % }
 % }
 % else {
     %= form_for 'yancy.auth.password.login' => begin
@@ -128,6 +136,9 @@ __DATA__
 </html>
 
 @@ migrations
+-- 2 up
+ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT FALSE;
+
 -- 1 up
 CREATE TABLE users (
     user_id SERIAL PRIMARY KEY,
