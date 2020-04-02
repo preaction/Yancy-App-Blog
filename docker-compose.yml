@@ -1,0 +1,26 @@
+version: '3.4'
+
+x-shared-environment: &shared-environment
+    POSTGRES_PASSWORD: there0ncew4s4PERL
+    BCRYPT_SALT: 0NEsaltybo112345
+
+services:
+    db:
+        image: postgres:12-alpine
+        environment: *shared-environment
+        volumes:
+            - db:/var/lib/postgresql/data
+    web:
+        build:
+            context: .
+        environment:
+            <<: *shared-environment
+        depends_on:
+            - db
+        ports:
+            - '3000:3000'
+        volumes:
+            - .:/app
+        command: [ "morbo", "myapp.pl" ]
+volumes:
+    db:
