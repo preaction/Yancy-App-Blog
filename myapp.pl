@@ -89,16 +89,29 @@ __DATA__
 
 @@ index.html.ep
 % layout 'default';
-% title $c->stash( 'username' ) || 'Welcome';
-% my %users;
-<h1><%= login_user ? login_user->{username} : 'Welcome' %></h1>
+% title 'blogs.perl.org';
+%= include 'el/login'
+<h1>Blogs.Perl.Org</h1>
 % for my $blog ( @$items ) {
-    % my $user = $users{ $blog->{username} } ||= $c->yancy->get( users => $blog->{username} );
     <h2>
-        %= link_to $blog->{title}, 'blog.get', { username => $user->{username}, %$blog }
+        %= link_to $blog->{title}, 'blog.get', $blog
     </h2>
     %== $blog->{synopsis_html}
-    %= link_to "Read $blog->{title}", 'blog.get', { username => $user->{username}, %$blog }
+    %= link_to "Read $blog->{title}", 'blog.get', $blog
+% }
+
+@@ el/login.html.ep
+% if ( login_user ) {
+    Hello, <%= login_user->{username} %> <%= link_to Logout => 'yancy.auth.password.logout' %>
+% }
+% else {
+    %= form_for 'yancy.auth.password.login' => begin
+        %= text_field username => ( placeholder => 'user' )
+        %= password_field password =>
+        %= tag button => begin
+            Login
+        % end
+    % end
 % }
 
 @@ blog_get.html.ep
