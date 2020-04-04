@@ -161,6 +161,19 @@ app->routes->get( '/' )->to(
 )->name( 'index' );
 
 helper login_user => sub { shift->yancy->auth->current_user };
+helper create_user => sub( $c, $username, $password, $email, %opt ) {
+    $c->yancy->create(
+        users => {
+            username => $username,
+            password => $password,
+            email => $email,
+            %opt,
+        },
+    );
+};
+helper create_admin => sub( $c, $username, $password, $email, %opt ) {
+    $c->create_user( $username, $password, $email, %opt );
+};
 
 my $user_root = app->routes->under( '/user/:username',
     sub {
