@@ -79,7 +79,7 @@ app->routes->get( '/' )->to(
     'yancy#list',
     schema => 'blog_posts',
     template => 'index',
-    order_by => { -desc => 'publish_date' },
+    order_by => { -desc => 'published_date' },
 )->name( 'index' );
 
 helper login_user => sub { shift->yancy->auth->current_user };
@@ -99,7 +99,7 @@ $user_root->get( '' )->to(
     user_id_field => 'username',
     schema => 'blog_posts',
     template => 'index',
-    order_by => { -desc => 'publish_date' },
+    order_by => { -desc => 'published_date' },
 )->name( 'blog.list' );
 
 $user_root->get( '/:blog_post_id/:slug' )->to(
@@ -158,8 +158,15 @@ __DATA__
 </html>
 
 @@ migrations
+-- 3 up
+ALTER TABLE blog_posts RENAME COLUMN publish_date TO published_date;
+-- 3 down
+ALTER TABLE blog_posts RENAME COLUMN published_date TO publish_date;
+
 -- 2 up
 ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT FALSE;
+-- 2 down
+ALTER TABLE users DROP COLUMN is_admin;
 
 -- 1 up
 CREATE TABLE users (
