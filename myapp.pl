@@ -103,14 +103,21 @@ plugin Yancy => {
     },
 };
 
-app->yancy->plugin( 'Auth::Password', {
+app->yancy->plugin( 'Auth', {
     schema => 'users',
-    username_field => 'username',
-    password_digest => {
-        type => 'Bcrypt',
-        cost => 12,
-        salt => $ENV{BCRYPT_SALT},
-    },
+    plugins => [
+        [
+            Password => {
+                username_field => 'username',
+                password_digest => {
+                    type => 'Bcrypt',
+                    cost => 12,
+                    salt => $ENV{BCRYPT_SALT},
+                },
+            },
+        ],
+        # XXX: Add Github, Twitter, Auth0, etc...
+    ],
 } );
 
 # User editor
