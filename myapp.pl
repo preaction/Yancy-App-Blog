@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-use Mojolicious::Lite;
+use Mojolicious::Lite -signatures;
 use Mojo::Pg;
 
 helper pg => sub {
@@ -8,6 +8,7 @@ helper pg => sub {
     );
 };
 app->pg->auto_migrate(1)->migrations->from_data;
+plugin AutoReload =>;
 
 plugin Yancy => {
     backend => { Pg => app->pg },
