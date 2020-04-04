@@ -10,6 +10,9 @@ helper pg => sub {
 app->pg->auto_migrate(1)->migrations->from_data;
 plugin AutoReload =>;
 
+plugin Moai => [ 'Bootstrap4', { version => '4.4.1' } ];
+app->defaults({ layout => 'default' });
+
 plugin Yancy => {
     backend => { Pg => app->pg },
     read_schema => 1,
@@ -185,35 +188,63 @@ $user_root->get( '/:blog_post_id/:slug' )->to(
     template => 'blog_get',
 )->name( 'blog.get' );
 
+get '/css/default' => { template => 'css/default', format => 'css' };
+get '/about' => 'about';
+get '/contact' => 'contact';
+
 app->start;
 __DATA__
 
 @@ index.html.ep
-% layout 'default';
-% title 'blogs.perl.org';
-%= include 'el/login'
-<h1>Blogs.Perl.Org</h1>
+% title 'Home - blogs.perl.org';
 % for my $blog ( @$items ) {
-    <h2>
+    <article class="mb-3">
+    <h1>
         %= link_to $blog->{title}, 'blog.get', $blog
-    </h2>
+        <small>by <%= link_to $blog->{username}, 'blog.list', $blog %></small>
+    </h1>
     %== $blog->{synopsis_html}
-    %= link_to "Read $blog->{title}", 'blog.get', $blog
+    <div class="border-top border-bottom border-light py-1 my-1">
+        %= link_to "Continue reading $blog->{title}", 'blog.get', $blog
+    </div>
+    </article>
 % }
+<div class="mt-3">
+    %= include 'moai/pager'
+</div>
 
-@@ el/login.html.ep
+@@ about.html.ep
+% title 'About - blogs.perl.org';
+<h1>About Blogs.perl.org</h1>
+<p>This is a blog site for the Perl community.</p>
+
+@@ contact.html.ep
+% title 'Contact - blogs.perl.org';
+<h1>Contact Us</h1>
+<p>To report illegal or infringing content, e-mail us at: admin@example.com</p>
+
+@@ _login.html.ep
 % if ( login_user ) {
-    Hello, <%= login_user->{username} %> <%= link_to Logout => 'yancy.auth.password.logout' %>
-    %= link_to 'Dashboard' => '/dashboard'
-    % if ( login_user->{is_admin} ) {
-        %= link_to 'Site Admin' => '/yancy'
-    % }
+    %= tag div => ( class => 'd-flex flex-column' ), begin
+        <span>Hello, <%= login_user->{username} %></span>
+        %= link_to 'My Dashboard' => '/dashboard', ( class => 'btn btn-primary my-1' )
+        % if ( login_user->{is_admin} ) {
+            %= link_to 'Site Admin' => '/yancy', ( class => 'btn btn-outline-warning my-1' )
+        % }
+        %= link_to Logout => 'yancy.auth.password.logout', ( class => 'btn btn-outline-secondary my-1' )
+    % end
 % }
 % else {
-    %= form_for 'yancy.auth.password.login' => begin
-        %= text_field username => ( placeholder => 'user' )
-        %= password_field password =>
-        %= tag button => begin
+    %= form_for 'yancy.auth.password.login', class => 'd-flex flex-column',  => begin
+        <div class="form-group">
+            <label for="login-username">Username</label>
+            %= text_field username => ( id => 'login-username', class => 'form-control' )
+        </div>
+        <div class="form-group">
+            <label for="login-password">Password</label>
+            %= password_field password => ( id => 'login-password', class => 'form-control' )
+        </div>
+        %= tag button => ( class => 'btn btn-primary' ), begin
             Login
         % end
     % end
@@ -225,12 +256,49 @@ __DATA__
 <h1><%= $item->{title} %></h1>
 %== $item->{content_html}
 
+@@ css/default.css.ep
+@import url(/css/flatly-bootstrap.min.css);
+@import url(/css/darkly-bootstrap.min.css) (prefers-color-scheme: dark);
+/* TODO: Let the user specify they want dark mode in a cookie */
+
+:root {
+    /* Tell browsers we support light/dark preferences */
+    color-schema: light dark;
+}
+
+/* Fix some things about darkly on dark mode */
+@media ( prefers-color-scheme: dark ) {
+    .form-control, .form-control:focus {
+        background-color: #303030;
+        color: #fff;
+    }
+    .form-control:focus {
+        background-color: #444;
+    }
+}
+
 @@ layouts/default.html.ep
-<!DOCTYPE html>
-<html>
-  <head><title><%= title %></title></head>
-  <body><%= content %></body>
-</html>
+% extends 'layouts/moai/default';
+% content_for head => begin
+    <link rel="stylesheet" href="/css/default.css" type="text/css">
+% end
+% content_for navbar => begin
+    <%= include 'moai/menu/navbar',
+        class => {
+            navbar => 'bg-primary navbar-dark',
+        },
+        brand => [ 'Blogs.perl.org' => 'index' ],
+        menu => [
+            [ Home => 'index' ],
+            [ 'About' => 'about' ],
+            [ 'Contact' => 'contact' ],
+        ],
+    %>
+% end
+% content_for sidebar => begin
+    %= include '_login'
+    <!-- XXX: Add recent activity -->
+% end
 
 @@ migrations
 -- 3 up
