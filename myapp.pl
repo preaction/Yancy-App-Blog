@@ -72,8 +72,8 @@ plugin Yancy => {
                 },
                 slug => {
                     title => 'Slug',
-                    description => 'The URL path part',
-                    pattern => '^[^/]+$',
+                    description => 'The URL path part. Only lower-case letters, dashes, and underscores.',
+                    pattern => '^[[:lower:]\-_]+$',
                 },
                 content => {
                     title => 'Content',
