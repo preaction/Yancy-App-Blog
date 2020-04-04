@@ -1,4 +1,4 @@
-FROM preaction/yancy:v1.047-pg
+FROM preaction/yancy:latest-pg
 
 WORKDIR /app
 COPY cpanfile /app
