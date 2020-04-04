@@ -20,20 +20,84 @@ plugin Yancy => {
     },
     schema => {
         mojo_migrations => { 'x-hidden' => 1 },
-        blog_posts => {
+        users => {
+            title => 'Users',
+            description => 'The user account information for authentication and authorization.',
+            'x-list-columns' => [
+                'username',
+                'email',
+                'is_admin',
+            ],
             properties => {
+                user_id => {
+                    'x-hidden' => 1,
+                },
+                username => {
+                    title => 'Username',
+                    description => q{The user's name for login and display},
+                },
+                password => {
+                    title => 'Password',
+                    format => 'password',
+                },
+                email => {
+                    title => 'E-mail',
+                    format => 'email',
+                },
+                is_admin => {
+                    title => 'Is Admin?',
+                    description => q{If true, user is allowed to access the primary admin dashboard, edit users, and edit other users' blogs.},
+                },
+            },
+        },
+        blog_posts => {
+            title => 'Blog Posts',
+            description => <<~'END,',
+                The posts in your blog.
+                END,
+            'x-list-columns' => [
+                'title',
+                'slug',
+                'username',
+                'published_date',
+            ],
+            'x-view-item-url' => '/user/{username}/{blog_post_id}/{slug}',
+            properties => {
+                blog_post_id => { 'x-hidden' => 1 },
+                username => {
+                    title => 'User',
+                },
+                title => {
+                    title => 'Title',
+                },
+                slug => {
+                    title => 'Slug',
+                    description => 'The URL path part',
+                    pattern => '^[^/]+$',
+                },
                 content => {
+                    title => 'Content',
+                    description => 'The main post content. Use Markdown for formatting.',
                     type => 'string',
                     format => 'markdown',
                     'x-html-field' => 'content_html',
                 },
                 content_html => { 'x-hidden' => 1 },
                 synopsis => {
+                    title => 'Synopsis',
+                    description => 'The initial text on the main page. Use Markdown formatting.',
                     type => 'string',
                     format => 'markdown',
                     'x-html-field' => 'synopsis_html',
                 },
                 synopsis_html => { 'x-hidden' => 1 },
+                published => {
+                    title => 'Is Published?',
+                },
+                published_date => {
+                    title => 'Published Date',
+                    description => 'When the post should be published on the site.',
+                },
             },
         },
     },
@@ -56,7 +120,11 @@ app->yancy->plugin( 'Editor', {
     schema => {
         blog_posts => {
             %{ app->yancy->schema( 'blog_posts' ) },
-            'x-list-columns' => [qw( title slug )],
+            'x-list-columns' => [qw( title slug published_date )],
+            properties => {
+                %{ app->yancy->schema( 'blog_posts' )->{properties} },
+                username => { 'x-hidden' => 1 },
+            },
         },
     },
     default_controller => 'Yancy::MultiTenant',
