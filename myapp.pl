@@ -60,8 +60,19 @@ app->yancy->plugin( 'Editor', {
         },
     },
     default_controller => 'Yancy::MultiTenant',
-    require_user => {},
-    route => app->routes->any( '/dashboard' ),
+    require_user => { },
+    route => app->routes->under( '/dashboard',
+        sub( $c ) {
+            # Needed by the MultiTenant controller
+            if ( my $user = $c->login_user ) {
+                $c->stash(
+                    user_id => $user->{username},
+                    user_id_field => 'username',
+                );
+            }
+            return 1;
+        },
+    ),
 } );
 
 app->routes->get( '/' )->to(
