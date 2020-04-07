@@ -244,7 +244,7 @@ __DATA__
         % if ( login_user->{is_admin} ) {
             %= link_to 'Site Admin' => '/yancy', ( class => 'btn btn-outline-warning my-1' )
         % }
-        %= link_to Logout => 'yancy.auth.password.logout', ( class => 'btn btn-outline-secondary my-1' )
+        %= link_to Logout => 'yancy.auth.logout', ( class => 'btn btn-outline-secondary my-1' )
     % end
 % }
 % else {
