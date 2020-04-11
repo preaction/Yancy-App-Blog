@@ -108,7 +108,15 @@ plugin Yancy => {
 
 app->yancy->plugin( 'Auth', {
     schema => 'users',
+    allow_register => 1,
     plugins => [
+        [
+            Github => {
+                username_field => 'github_username',
+                client_id => 'dc09a416a5aee52c7e1f',
+                client_secret => 'b8261a4daf222c03866de363a0bfbc0e35b23bbd',
+            },
+        ],
         [
             Password => {
                 username_field => 'username',
@@ -119,7 +127,7 @@ app->yancy->plugin( 'Auth', {
                 },
             },
         ],
-        # XXX: Add Github, Twitter, Auth0, etc...
+        # XXX: Add Twitter, Auth0, etc...
     ],
 } );
 
@@ -303,6 +311,16 @@ __DATA__
 % end
 
 @@ migrations
+-- 4 up
+ALTER TABLE users ADD COLUMN github_username TEXT UNIQUE;
+ALTER TABLE users ALTER COLUMN username DROP NOT NULL;
+ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
+-- 4 down
+ALTER TABLE users DROP COLUMN github_username;
+DELETE FROM users WHERE username IS NULL AND password IS NULL;
+ALTER TABLE users ALTER COLUMN username SET NOT NULL;
+ALTER TABLE users ALTER COLUMN password SET NOT NULL;
+
 -- 3 up
 ALTER TABLE blog_posts RENAME COLUMN publish_date TO published_date;
 -- 3 down
