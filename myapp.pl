@@ -248,19 +248,7 @@ __DATA__
     % end
 % }
 % else {
-    %= form_for 'yancy.auth.password.login', class => 'd-flex flex-column',  => begin
-        <div class="form-group">
-            <label for="login-username">Username</label>
-            %= text_field username => ( id => 'login-username', class => 'form-control' )
-        </div>
-        <div class="form-group">
-            <label for="login-password">Password</label>
-            %= password_field password => ( id => 'login-password', class => 'form-control' )
-        </div>
-        %= tag button => ( class => 'btn btn-primary' ), begin
-            Login
-        % end
-    % end
+    %= $c->yancy->auth->login_form
 % }
 
 @@ blog_get.html.ep
@@ -293,7 +281,8 @@ __DATA__
 @@ layouts/default.html.ep
 % extends 'layouts/moai/default';
 % content_for head => begin
-    <link rel="stylesheet" href="/css/default.css" type="text/css">
+    %= stylesheet '/css/default.css'
+    %= stylesheet '/yancy/font-awesome/css/font-awesome.css'
 % end
 % content_for navbar => begin
     <%= include 'moai/menu/navbar',

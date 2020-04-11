@@ -1,5 +1,8 @@
 FROM preaction/yancy:latest-pg
 
+RUN apt-get install -y \
+    libssl-dev
+
 WORKDIR /app
 COPY cpanfile /app
 RUN cpanm --installdeps .
