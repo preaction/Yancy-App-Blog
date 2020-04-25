@@ -13,6 +13,16 @@ plugin AutoReload =>;
 plugin Moai => [ 'Bootstrap4', { version => '4.4.1' } ];
 app->defaults({ layout => 'default' });
 
+app->plugin( EPRenderer => {
+    template => {
+        # Enable modern Perl features in all templates
+        prepend => <<~END,
+            use v5.30;
+            use experimental qw( signatures postderef );
+            END
+    },
+} );
+
 plugin Yancy => {
     backend => { Pg => app->pg },
     read_schema => 1,
@@ -26,6 +36,7 @@ plugin Yancy => {
         users => {
             title => 'Users',
             description => 'The user account information for authentication and authorization.',
+            'x-id-field' => 'username',
             'x-list-columns' => [
                 'username',
                 'email',
@@ -103,6 +114,26 @@ plugin Yancy => {
                 },
             },
         },
+        blog_reactions => {
+            'x-id-field' => 'blog_reaction_id',
+            required => [qw( blog_post_id reaction_text )],
+            properties => {
+                blog_reaction_id => {
+                    type => 'integer',
+                    readOnly => 1,
+                },
+                blog_post_id => {
+                    type => 'integer',
+                    'x-foreign-key' => 'blog_posts',
+                },
+                reaction_text => {
+                    type => 'string',
+                },
+                reaction_count => {
+                    type => 'integer',
+                },
+            },
+        },
     },
 };
 
@@ -158,6 +189,9 @@ app->routes->get( '/' )->to(
     schema => 'blog_posts',
     template => 'index',
     order_by => { -desc => 'published_date' },
+    before_render => [
+        \&add_reactions,
+    ],
 )->name( 'index' );
 
 helper login_user => sub { shift->yancy->auth->current_user };
@@ -175,6 +209,32 @@ helper create_admin => sub( $c, $username, $password, $email, %opt ) {
     $c->create_user( $username, $password, $email, %opt );
 };
 
+# Only allow certain reactions
+my @ALLOW_REACTIONS = sort
+    "\x{2764}\x{FE0F}",     # Red Heart
+    "\x{1F602}",            # Face With Tears of Joy
+    "\x{1F914}",            # Thinking Face
+    "\x{1F92F}",            # Shocked Face with Exploding Head
+    "\x{1F44F}",            # Clapping Hands Sign
+    "\x{1F525}",            # Fire
+    ;
+
+sub add_reactions( $c, $item ) {
+    my %react_counts =
+        map $_->@{qw( reaction_text reaction_count )},
+        $c->yancy->list(
+            blog_reactions => {
+                $c->stash->%{qw( blog_post_id )},
+            },
+        );
+    for my $icon ( @ALLOW_REACTIONS ) {
+        push $item->{blog_reactions}->@*, {
+            reaction_text => $icon,
+            reaction_count => $react_counts{ $icon } // 0,
+        };
+    }
+}
+
 my $user_root = app->routes->under( '/user/:username',
     sub {
         my ( $c ) = @_;
@@ -191,6 +251,9 @@ $user_root->get( '' )->to(
     schema => 'blog_posts',
     template => 'index',
     order_by => { -desc => 'published_date' },
+    before_render => [
+        \&add_reactions,
+    ],
 )->name( 'blog.list' );
 
 $user_root->get( '/:blog_post_id/:slug' )->to(
@@ -199,7 +262,41 @@ $user_root->get( '/:blog_post_id/:slug' )->to(
     id_field => 'blog_post_id',
     schema => 'blog_posts',
     template => 'blog_get',
+    before_render => [
+        \&add_reactions,
+    ],
 )->name( 'blog.get' );
+
+$user_root->post( '/:blog_post_id/:slug/react' )->name( 'blog.react' )->to(
+    'yancy#set',
+    schema => 'blog_reactions',
+    forward_to => 'blog.get',
+    # XXX: Yancy should not need this since it is the x-id-field of
+    # this schema
+    id_field => 'blog_reaction_id',
+    before_write => [
+        sub( $c, $item ) {
+            die sprintf 'Reaction %s not allowed', $item->{reaction_text}
+                unless grep { $_ eq $item->{reaction_text} } @ALLOW_REACTIONS;
+            # XXX: Yancy should be doing this automatically because it
+            # is set in the URL...
+            $item->{blog_post_id} = $c->param('blog_post_id');
+            # Increment the counter
+            my %search = (
+                $c->stash->%{'blog_post_id'},
+                $item->%{'reaction_text'},
+            );
+            if ( my ( $existing_item ) = $c->yancy->list( $c->stash->{schema}, \%search ) ) {
+                $c->stash->{blog_reaction_id} = $existing_item->{ blog_reaction_id };
+                $item->{reaction_count} = $existing_item->{ reaction_count } + 1;
+            }
+            else {
+                $item->{reaction_count} = 1;
+            }
+            ; $c->log->debug( 'Item to set: ', $c->dumper( $item ) );
+        },
+    ],
+);
 
 get '/css/default' => { template => 'css/default', format => 'css' };
 get '/about' => 'about';
@@ -216,6 +313,7 @@ __DATA__
         %= link_to $blog->{title}, 'blog.get', $blog
         <small>by <%= link_to $blog->{username}, 'blog.list', $blog %></small>
     </h1>
+    %= include '_blog_react', item => $blog
     %== $blog->{synopsis_html}
     <div class="border-top border-bottom border-light py-1 my-1">
         %= link_to "Continue reading $blog->{title}", 'blog.get', $blog
@@ -251,10 +349,28 @@ __DATA__
     %= $c->yancy->auth->login_form
 % }
 
+@@ _blog_react.html.ep
+% my $item = stash 'item';
+% my $_react_button = begin
+    % my ( $text, $count ) = @_;
+    %= tag button => ( name => 'reaction_text', value => $text, class => 'btn btn-outline-secondary' ), begin
+        %= $count
+        %= $text
+    % end
+% end
+%= form_for 'blog.react', $item, begin
+    %= csrf_field
+    % for my $reaction ( $item->{blog_reactions}->@* ) {
+        %= $_react_button->( $reaction->@{qw( reaction_text reaction_count )} )
+    % }
+% end
+
+@@ _react_button.html.ep
 @@ blog_get.html.ep
 % layout 'default';
 % title $item->{title} . ' -- ' . $c->stash( 'username' );
 <h1><%= $item->{title} %></h1>
+%= include '_blog_react'
 %== $item->{content_html}
 
 @@ css/default.css.ep
@@ -303,6 +419,16 @@ __DATA__
 % end
 
 @@ migrations
+-- 4 up
+CREATE TABLE blog_reactions (
+    blog_reaction_id SERIAL PRIMARY KEY,
+    blog_post_id INTEGER NOT NULL REFERENCES blog_posts( blog_post_id ),
+    reaction_text TEXT NOT NULL,
+    reaction_count INTEGER DEFAULT 0
+);
+-- 4 down
+DROP TABLE blog_reactions;
+
 -- 3 up
 ALTER TABLE blog_posts RENAME COLUMN publish_date TO published_date;
 -- 3 down
