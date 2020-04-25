@@ -113,6 +113,9 @@ plugin Yancy => {
                     title => 'Published Date',
                     description => 'When the post should be published on the site.',
                 },
+                allow_comments => {
+                    title => 'Allow New Comments',
+                },
             },
         },
         blog_reactions => {
@@ -363,7 +366,13 @@ $user_root->post( '/:blog_post_id/:slug/react' )->name( 'blog.react' )->to(
     ],
 );
 
-my $can_comment = app->yancy->auth->require_user;
+my $can_comment = sub( $c ) {
+    state $authz = $c->yancy->auth->require_user;
+    my $blog_post = $c->yancy->get( blog_posts => $c->param( 'blog_post_id' ) );
+    die 'Comments disabled on this post'
+        if !$blog_post->{allow_comments};
+    return $authz->($c);
+};
 $user_root->under( '/:blog_post_id/:slug/comment', $can_comment )->post( '' )->name( 'blog.comment' )->to(
     'yancy#set',
     schema => 'blog_comments',
@@ -463,7 +472,10 @@ __DATA__
 %= include '_blog_react'
 %== $item->{content_html}
 <h2>Comments</h2>
-% if ( login_user ) {
+% if ( !$item->{allow_comments} ) {
+    <p>Commenting is disabled on this post.</p>
+% }
+% elsif ( login_user ) {
     %= form_for 'blog.comment', $item, ( class => 'mb-3' ) => begin
         %= csrf_field
         <div class="form-group">
@@ -476,7 +488,7 @@ __DATA__
     % end
 % }
 % else {
-    Log in to comment
+    <p>Log in to comment</p>
 % }
 % for my $comment ( $item->{blog_comments}->@* ) {
     <div class="card my-1">
@@ -536,6 +548,11 @@ __DATA__
 % end
 
 @@ migrations
+-- 6 up
+ALTER TABLE blog_posts ADD COLUMN allow_comments BOOLEAN DEFAULT TRUE;
+-- 6 down
+ALTER TABLE blog_posts DROP COLUMN allow_comments;
+
 -- 5 up
 CREATE TABLE blog_comments (
     blog_comment_id SERIAL PRIMARY KEY,
