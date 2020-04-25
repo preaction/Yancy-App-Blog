@@ -1,6 +1,7 @@
 FROM preaction/yancy:latest-pg
 
-RUN apt-get install -y \
+RUN apt-get update && apt-get install -y \
+    libcmark-dev \
     libssl-dev
 
 WORKDIR /app

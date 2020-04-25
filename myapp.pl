@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 use Mojolicious::Lite -signatures;
 use Mojo::Pg;
+use CommonMark;
 
 helper pg => sub {
     state $pg = Mojo::Pg->new(
@@ -134,6 +135,37 @@ plugin Yancy => {
                 },
             },
         },
+        blog_comments => {
+            'x-id-field' => 'blog_comment_id',
+            required => [qw( blog_post_id username comment comment_html )],
+            properties => {
+                blog_comment_id => {
+                    type => 'integer',
+                    readOnly => 1,
+                },
+                blog_post_id => {
+                    type => 'integer',
+                    'x-foreign-key' => 'blog_posts',
+                },
+                username => {
+                    type => 'string',
+                    'x-foreign-key' => 'users',
+                },
+                comment => {
+                    type => 'string',
+                    format => 'markdown',
+                    'x-html-field' => 'html',
+                },
+                comment_html => {
+                    type => 'string',
+                },
+                created => {
+                    type => 'string',
+                    format => 'date-time',
+                    default => 'now',
+                },
+            },
+        },
     },
 };
 
@@ -191,6 +223,7 @@ app->routes->get( '/' )->to(
     order_by => { -desc => 'published_date' },
     before_render => [
         \&add_reactions,
+        \&add_comments,
     ],
 )->name( 'index' );
 
@@ -209,6 +242,24 @@ helper create_admin => sub( $c, $username, $password, $email, %opt ) {
     $c->create_user( $username, $password, $email, %opt );
 };
 
+helper parse_markdown => sub( $c, $markdown, %opt ) {
+    my $html = CommonMark->markdown_to_html( $markdown );
+    my $dom = Mojo::DOM->new( $html );
+    if ( $opt{nofollow} ) {
+        $dom->find( 'a[href]' )->each( sub { $_->attr( rel => 'nofollow' ) } );
+    }
+    state @allow_tags = qw(
+        a div span strong em b u i img table thead tfoot tbody tr td th figure
+        figcaption aside pre code samp kbd p br hr q blockquote
+    );
+    $dom->find( sprintf ':not(%s)', join ',', @allow_tags )
+        ->each( sub {
+            $_->replace( '&lt;' . $_->tag . '&gt;' . $_->content . '&lt;/' . $_->tag . '&gt;' );
+        } )
+        ;
+    return "$dom";
+};
+
 # Only allow certain reactions
 my @ALLOW_REACTIONS = sort
     "\x{2764}\x{FE0F}",     # Red Heart
@@ -224,7 +275,7 @@ sub add_reactions( $c, $item ) {
         map $_->@{qw( reaction_text reaction_count )},
         $c->yancy->list(
             blog_reactions => {
-                $c->stash->%{qw( blog_post_id )},
+                $item->%{qw( blog_post_id )},
             },
         );
     for my $icon ( @ALLOW_REACTIONS ) {
@@ -233,6 +284,19 @@ sub add_reactions( $c, $item ) {
             reaction_count => $react_counts{ $icon } // 0,
         };
     }
+}
+
+sub add_comments( $c, $item ) {
+    $item->{blog_comments} = [
+        $c->yancy->list(
+            blog_comments => {
+                $item->%{qw( blog_post_id )},
+            },
+            {
+                order_by => 'created',
+            },
+        )
+    ];
 }
 
 my $user_root = app->routes->under( '/user/:username',
@@ -253,6 +317,7 @@ $user_root->get( '' )->to(
     order_by => { -desc => 'published_date' },
     before_render => [
         \&add_reactions,
+        \&add_comments,
     ],
 )->name( 'blog.list' );
 
@@ -264,6 +329,7 @@ $user_root->get( '/:blog_post_id/:slug' )->to(
     template => 'blog_get',
     before_render => [
         \&add_reactions,
+        \&add_comments,
     ],
 )->name( 'blog.get' );
 
@@ -293,7 +359,31 @@ $user_root->post( '/:blog_post_id/:slug/react' )->name( 'blog.react' )->to(
             else {
                 $item->{reaction_count} = 1;
             }
-            ; $c->log->debug( 'Item to set: ', $c->dumper( $item ) );
+        },
+    ],
+);
+
+my $can_comment = app->yancy->auth->require_user;
+$user_root->under( '/:blog_post_id/:slug/comment', $can_comment )->post( '' )->name( 'blog.comment' )->to(
+    'yancy#set',
+    schema => 'blog_comments',
+    # XXX: Yancy should allow a subref here. forward_to doesn't work
+    # because the comment gets created with a username that may be
+    # different from the blog post
+    #forward_to => 'blog.get',
+    # XXX: Yancy should not need this since it is the x-id-field of
+    # this schema
+    id_field => 'blog_comment_id',
+    before_write => [
+        sub( $c, $item ) {
+            $item->{username} = $c->login_user->{username};
+            # XXX: Yancy should be doing this automatically because it
+            # is set in the URL...
+            $item->{blog_post_id} = $c->param('blog_post_id');
+            # Parse comment Markdown
+            $item->{comment_html} = $c->parse_markdown( $item->{comment}, nofollow => 1 );
+            # XXX: Set up forwarding manually
+            $c->redirect_to( 'blog.get' );
         },
     ],
 );
@@ -315,8 +405,9 @@ __DATA__
     </h1>
     %= include '_blog_react', item => $blog
     %== $blog->{synopsis_html}
-    <div class="border-top border-bottom border-light py-1 my-1">
+    <div class="border-top border-bottom border-light py-1 my-1 d-flex justify-content-between">
         %= link_to "Continue reading $blog->{title}", 'blog.get', $blog
+        %= tag span => sprintf '%d comments', scalar $blog->{blog_comments}->@*
     </div>
     </article>
 % }
@@ -365,13 +456,39 @@ __DATA__
     % }
 % end
 
-@@ _react_button.html.ep
 @@ blog_get.html.ep
 % layout 'default';
 % title $item->{title} . ' -- ' . $c->stash( 'username' );
 <h1><%= $item->{title} %></h1>
 %= include '_blog_react'
 %== $item->{content_html}
+<h2>Comments</h2>
+% if ( login_user ) {
+    %= form_for 'blog.comment', $item, ( class => 'mb-3' ) => begin
+        %= csrf_field
+        <div class="form-group">
+            <label for="comment-text">Add Comment</label>
+            %= text_area 'comment', ( id => 'comment-text', class => 'form-control' )
+        </div>
+        %= tag button => ( class => 'btn btn-primary' ), begin
+            Submit Comment
+        % end
+    % end
+% }
+% else {
+    Log in to comment
+% }
+% for my $comment ( $item->{blog_comments}->@* ) {
+    <div class="card my-1">
+        <h5 class="card-header d-flex justify-content-between">
+            <span><%= $comment->{username} %></span>
+            <span><%= $comment->{created} %></span>
+        </h5>
+        <div class="card-body">
+            %== $comment->{comment_html}
+        </div>
+    </div>
+% }
 
 @@ css/default.css.ep
 @import url(/css/flatly-bootstrap.min.css);
@@ -419,6 +536,18 @@ __DATA__
 % end
 
 @@ migrations
+-- 5 up
+CREATE TABLE blog_comments (
+    blog_comment_id SERIAL PRIMARY KEY,
+    blog_post_id INTEGER NOT NULL REFERENCES blog_posts( blog_post_id ),
+    username TEXT NOT NULL REFERENCES users( username ),
+    comment TEXT NOT NULL,
+    comment_html TEXT NOT NULL,
+    created TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+-- 5 down
+DROP TABLE blog_comments;
+
 -- 4 up
 CREATE TABLE blog_reactions (
     blog_reaction_id SERIAL PRIMARY KEY,
