@@ -157,7 +157,7 @@ plugin Yancy => {
                 comment => {
                     type => 'string',
                     format => 'markdown',
-                    'x-html-field' => 'html',
+                    'x-html-field' => 'comment_html',
                 },
                 comment_html => {
                     type => 'string',
