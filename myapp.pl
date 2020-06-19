@@ -1,12 +1,26 @@
 #!/usr/bin/env perl
 use Mojolicious::Lite -signatures;
+use Mojo::JSON qw( true false );
 use Mojo::Pg;
 use CommonMark;
 
 helper pg => sub {
-    state $pg = Mojo::Pg->new(
-        sprintf 'postgres://postgres:%s@db/postgres', $ENV{POSTGRES_PASSWORD},
-    );
+    state $pg;
+    if ( !$pg ) {
+        # Wait for Docker container to become ready
+        until ( $pg && $pg->db->ping ) {
+            app->log->debug( 'Attempting to connect to database...' );
+            eval {
+                $pg = Mojo::Pg->new(
+                    sprintf 'postgres://postgres:%s@db/postgres', $ENV{POSTGRES_PASSWORD},
+                );
+            };
+            last if $pg && !$@;
+            app->log->debug( 'Connection failed. Waiting to try again.' . ( $@ ? ' Error: ' . $@ : '' ) );
+            sleep 2;
+        }
+    }
+    return $pg;
 };
 app->pg->auto_migrate(1)->migrations->from_data;
 plugin AutoReload =>;
@@ -124,7 +138,7 @@ plugin Yancy => {
             properties => {
                 blog_reaction_id => {
                     type => 'integer',
-                    readOnly => 1,
+                    readOnly => true,
                 },
                 blog_post_id => {
                     type => 'integer',
@@ -144,7 +158,7 @@ plugin Yancy => {
             properties => {
                 blog_comment_id => {
                     type => 'integer',
-                    readOnly => 1,
+                    readOnly => true,
                 },
                 blog_post_id => {
                     type => 'integer',
@@ -209,6 +223,8 @@ app->yancy->plugin( 'Editor', {
         sub( $c ) {
             # Needed by the MultiTenant controller
             if ( my $user = $c->login_user ) {
+                # XXX: This doesn't work with Github, we need to use the
+                # user_id, not the username, everywhere
                 $c->stash(
                     user_id => $user->{username},
                     user_id_field => 'username',
@@ -242,6 +258,7 @@ helper create_user => sub( $c, $username, $password, $email, %opt ) {
     );
 };
 helper create_admin => sub( $c, $username, $password, $email, %opt ) {
+    $opt{ is_admin } = 1;
     $c->create_user( $username, $password, $email, %opt );
 };
 

@@ -24,3 +24,7 @@ To run the tests, you must have Docker installed. Then:
 
     make test
 
+## Operations
+
+* To connect to the database: `docker-compose exec db psql -U postgres`
+

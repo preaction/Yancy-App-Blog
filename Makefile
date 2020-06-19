@@ -9,7 +9,7 @@ test:
 	docker-compose run web prove -v
 
 deploy:
-	echo "\U0274C" No deploy written yet
+	@echo "❌ No deploy written yet"
 
 sql:
 	docker-compose start db
