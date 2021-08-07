@@ -1,3 +1,4 @@
 db.log
 cpanfile.snapshot
 db
+*.env

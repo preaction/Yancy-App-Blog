@@ -200,6 +200,16 @@ app->yancy->plugin( 'Auth', {
             },
         ],
         # XXX: Add Github, Twitter, Auth0, etc...
+        ( $ENV{GITHUB_CLIENT_ID} ?
+            [
+                Github => {
+                    username_field => 'github_login',
+                    client_id => $ENV{GITHUB_CLIENT_ID},
+                    client_secret => $ENV{GITHUB_CLIENT_SECRET},
+                    allow_register => 1,
+                },
+            ] : ()
+        ),
     ],
 } );
 
@@ -454,7 +464,7 @@ __DATA__
 @@ _login.html.ep
 % if ( login_user ) {
     %= tag div => ( class => 'd-flex flex-column' ), begin
-        <span>Hello, <%= login_user->{username} %></span>
+        <span>Hello, <%= login_user->{username} || login_user->{github_login} %></span>
         %= link_to 'My Dashboard' => '/dashboard', ( class => 'btn btn-primary my-1' )
         % if ( login_user->{is_admin} ) {
             %= link_to 'Site Admin' => '/yancy', ( class => 'btn btn-outline-warning my-1' )
@@ -565,6 +575,17 @@ __DATA__
 % end
 
 @@ migrations
+-- 7 up
+ALTER TABLE users ADD COLUMN github_login VARCHAR DEFAULT NULL;
+ALTER TABLE users ALTER COLUMN username DROP NOT NULL;
+ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
+ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
+-- 7 down
+ALTER TABLE users DROP COLUMN github_login;
+ALTER TABLE users ALTER COLUMN username SET NOT NULL;
+ALTER TABLE users ALTER COLUMN password SET NOT NULL;
+ALTER TABLE users ALTER COLUMN email SET NOT NULL;
+
 -- 6 up
 ALTER TABLE blog_posts ADD COLUMN allow_comments BOOLEAN DEFAULT TRUE;
 -- 6 down
