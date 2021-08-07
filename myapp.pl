@@ -40,7 +40,6 @@ app->plugin( EPRenderer => {
 
 plugin Yancy => {
     backend => { Pg => app->pg },
-    read_schema => 1,
     editor => {
         require_user => {
             is_admin => 1,
